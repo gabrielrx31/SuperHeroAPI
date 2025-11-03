@@ -2,7 +2,7 @@ const express = require('express');
 const morgan = require('morgan');
 const path = require('path');
 
-const heroRoutes = require('../routes/heroRoutes');
+const heroRoutes = require('./routes/heroRoutes');
 const heroCrudRoutes = rquire('../routes/heroCrudRoutes');
 
 const app = express();
