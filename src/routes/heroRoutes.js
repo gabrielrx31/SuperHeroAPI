@@ -3,7 +3,6 @@ const router = express.Router();
 
 const heroController = require('../controllers/heroController');
 
-router.get('/', heroController.getAllHeroes);
-router.get('/:id', heroController.getHeroById);
+router.get('/', )
 
 module.exports = router;
