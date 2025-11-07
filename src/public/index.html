@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Superhero API - Favoritter</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>🦸 Superhero Favoritter</h1>
+        
+        <!-- Tab Navigation -->
+        <div class="tab-navigation">
+            <button class="tab-button active" onclick="switchTab('heroes')">
+                🦸 Alle Helte
+            </button>
+            <button class="tab-button" onclick="switchTab('favorites')">
+                ⭐ Mine Favoritter
+            </button>
+        </div>
+
+        <!-- Tab 1: Alle helte -->
+        <div id="heroes-tab" class="tab-content active">
+            <section>
+                <h2>Alle Superhelte</h2>
+                
+                <div class="search-container">
+                    <input 
+                        type="text" 
+                        id="search-input" 
+                        placeholder="🔍 Søg efter superhelt..."
+                        onkeyup="searchHeroes()"
+                    >
+                </div>
+
+                <div class="results-count" id="results-count"></div>
+                
+                <div id="heroes-list" class="loading">Henter superhelte...</div>
+                <div id="pagination" style="margin-top: 30px;"></div>
+            </section>
+        </div>
+
+        <!-- Tab 2: Favoritter -->
+        <div id="favorites-tab" class="tab-content">
+            <section>
+                <h2>Mine Favoritter ⭐</h2>
+                <div id="favorites-list" class="loading">Henter favoritter...</div>
+            </section>
+        </div>
+    </div>
+
+    <!-- Modal for at tilføje favorit -->
+    <div id="add-favorite-modal" class="modal">
+        <div class="modal-content">
+            <h3>Tilføj til favoritter</h3>
+            <p id="modal-hero-name"></p>
+            <textarea id="favorite-note" placeholder="Hvorfor er denne helt din favorit?"></textarea>
+            <div class="modal-buttons">
+                <button class="cancel-btn" onclick="closeModal()">Annuller</button>
+                <button onclick="saveFavorite()">Gem favorit</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentHeroId = null;
+let allHeroes = [];
+let currentPage = 1;
+const HEROES_PER_PAGE = 50;
+
+// Switch mellem tabs
+function switchTab(tab) {
+    document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+
+    if (tab === 'heroes') {
+        document.querySelector('.tab-button:first-child').classList.add('active');
+        document.getElementById('heroes-tab').classList.add('active');
+    } else {
+        document.querySelector('.tab-button:last-child').classList.add('active');
+        document.getElementById('favorites-tab').classList.add('active');
+        loadFavorites();
+    }
+}
+
+// Hent alle helte ved page load
+async function loadHeroes() {
+    try {
+        const response = await fetch('/superheroes');
+        if (!response.ok) throw new Error('HTTP error! status: ' + response.status);
+        
+        const heroes = await response.json();
+        allHeroes = heroes;
+        
+        currentPage = 1;
+        displayPage(currentPage);
+    } catch (error) {
+        console.error('Error loading heroes:', error);
+        document.getElementById('heroes-list').innerHTML = 
+            '<p class="empty-state">Fejl ved indlæsning af helte: ' + error.message + '</p>';
+    }
+}
+
+// Vis en specifik side
+function displayPage(pageNumber) {
+    const startIndex = (pageNumber - 1) * HEROES_PER_PAGE;
+    const endIndex = startIndex + HEROES_PER_PAGE;
+    const heroesToDisplay = allHeroes.slice(startIndex, endIndex);
+    
+    displayHeroes(heroesToDisplay);
+    updatePagination();
+    updateResultsCount();
+    
+    // Scroll til toppen af hero-listen
+    document.getElementById('heroes-list').scrollIntoView({ behavior: 'smooth' });
+}
+
+// Vis helte
+function displayHeroes(heroes) {
+    const heroList = document.getElementById('heroes-list');
+    
+    if (heroes.length === 0) {
+        heroList.innerHTML = '<p class="empty-state">Ingen helte fundet</p>';
+        return;
+    }
+    
+    heroList.innerHTML = heroes.map(hero => `
+        <div class="hero-card">
+            <img src="${hero.image}" alt="${hero.name}" onerror="this.src='https://via.placeholder.com/300x400?text=No+Image'">
+            <h3>${hero.name}</h3>
+            <p>${hero.fullName || 'Ukendt identitet'}</p>
+            <span class="strength">💪 Styrke: ${hero.strength || 'N/A'}</span>
+            <br><br>
+            <button onclick="openModal(${hero.id}, '${hero.name.replace(/'/g, "\\'")}')">
+                ⭐ Tilføj til favoritter
+            </button>
+        </div>
+    `).join('');
+}
+
+// Opdater pagination knapper
+function updatePagination() {
+    const totalPages = Math.ceil(allHeroes.length / HEROES_PER_PAGE);
+    const paginationEl = document.getElementById('pagination');
+    
+    let paginationHTML = '';
+    
+    // Forrige knap
+    if (currentPage > 1) {
+        paginationHTML += `<button onclick="goToPage(${currentPage - 1})" class="pagination-btn">« Forrige</button>`;
+    } else {
+        paginationHTML += `<button class="pagination-btn disabled" disabled>« Forrige</button>`;
+    }
+    
+    // Side numre
+    const startPage = Math.max(1, currentPage - 2);
+    const endPage = Math.min(totalPages, currentPage + 2);
+    
+    if (startPage > 1) {
+        paginationHTML += `<button onclick="goToPage(1)" class="pagination-btn">1</button>`;
+        if (startPage > 2) {
+            paginationHTML += `<span class="pagination-dots">...</span>`;
+        }
+    }
+    
+    for (let i = startPage; i <= endPage; i++) {
+        if (i === currentPage) {
+            paginationHTML += `<button class="pagination-btn active">${i}</button>`;
+        } else {
+            paginationHTML += `<button onclick="goToPage(${i})" class="pagination-btn">${i}</button>`;
+        }
+    }
+    
+    if (endPage < totalPages) {
+        if (endPage < totalPages - 1) {
+            paginationHTML += `<span class="pagination-dots">...</span>`;
+        }
+        paginationHTML += `<button onclick="goToPage(${totalPages})" class="pagination-btn">${totalPages}</button>`;
+    }
+    
+    // Næste knap
+    if (currentPage < totalPages) {
+        paginationHTML += `<button onclick="goToPage(${currentPage + 1})" class="pagination-btn">Næste »</button>`;
+    } else {
+        paginationHTML += `<button class="pagination-btn disabled" disabled>Næste »</button>`;
+    }
+    
+    paginationEl.innerHTML = paginationHTML;
+}
+
+// Gå til en specifik side
+function goToPage(pageNumber) {
+    currentPage = pageNumber;
+    displayPage(currentPage);
+}
+
+// Opdater results count
+function updateResultsCount() {
+    const countEl = document.getElementById('results-count');
+    const totalPages = Math.ceil(allHeroes.length / HEROES_PER_PAGE);
+    const startIndex = (currentPage - 1) * HEROES_PER_PAGE + 1;
+    const endIndex = Math.min(currentPage * HEROES_PER_PAGE, allHeroes.length);
+    
+    countEl.textContent = `Viser ${startIndex}-${endIndex} af ${allHeroes.length} helte (Side ${currentPage} af ${totalPages})`;
+}
+
+// Søg efter helte
+function searchHeroes() {
+    const searchTerm = document.getElementById('search-input').value.toLowerCase();
+    
+    if (searchTerm === '') {
+        currentPage = 1;
+        displayPage(currentPage);
+        return;
+    }
+
+    const filtered = allHeroes.filter(hero => 
+        hero.name.toLowerCase().includes(searchTerm) ||
+        (hero.fullName && hero.fullName.toLowerCase().includes(searchTerm))
+    );
+
+    displayHeroes(filtered);
+    document.getElementById('pagination').innerHTML = '';
+    document.getElementById('results-count').textContent = `Fundet ${filtered.length} helte`;
+}
+
+// Hent favoritter
+async function loadFavorites() {
+    try {
+        const response = await fetch('/superheroes/favorites');
+        const favorites = await response.json();
+        
+        const favList = document.getElementById('favorites-list');
+        
+        if (favorites.length === 0) {
+            favList.innerHTML = '<p class="empty-state">Du har ingen favoritter endnu. Gå til "Alle Helte" for at tilføje!</p>';
+            return;
+        }
+        
+        const heroDetailsPromises = favorites.map(async (fav) => {
+            try {
+                const heroResponse = await fetch(`/superheroes/${fav.id}`);
+                if (heroResponse.ok) {
+                    const hero = await heroResponse.json();
+                    return { ...fav, hero };
+                }
+            } catch (e) {
+                console.error('Error fetching hero details:', e);
+            }
+            return fav;
+        });
+
+        const favoritesWithHeroes = await Promise.all(heroDetailsPromises);
+        
+        favList.innerHTML = favoritesWithHeroes.map(fav => {
+            if (fav.hero) {
+                return `
+                    <div class="favorite-card" style="background: linear-gradient(135deg, #ffeaa7 0%, #fdcb6e 100%); padding: 20px;">
+                        <div style="display: flex; gap: 15px; align-items: center; flex: 1;">
+                            <img src="${fav.hero.image}" alt="${fav.hero.name}" style="width: 80px; height: 80px; object-fit: cover; border-radius: 50%;">
+                            <div class="favorite-info">
+                                <h4>${fav.hero.name}</h4>
+                                <p style="margin: 5px 0; color: #555;">${fav.hero.fullName || 'Ukendt identitet'}</p>
+                                <p style="margin-top: 5px;">"${fav.note}"</p>
+                            </div>
+                        </div>
+                        <button class="delete-btn" onclick="deleteFavorite(${fav.id})">
+                            🗑️ Slet
+                        </button>
+                    </div>
+                `;
+            } else {
+                return `
+                    <div class="favorite-card">
+                        <div class="favorite-info">
+                            <h4>Helt ID: ${fav.id}</h4>
+                            <p>"${fav.note}"</p>
+                        </div>
+                        <button class="delete-btn" onclick="deleteFavorite(${fav.id})">
+                            🗑️ Slet
+                        </button>
+                    </div>
+                `;
+            }
+        }).join('');
+    } catch (error) {
+        console.error('Error loading favorites:', error);
+        document.getElementById('favorites-list').innerHTML = 
+            '<p class="empty-state">Fejl ved indlæsning af favoritter</p>';
+    }
+}
+
+// Åbn modal
+function openModal(heroId, heroName) {
+    currentHeroId = heroId;
+    document.getElementById('modal-hero-name').textContent = `Tilføjer: ${heroName}`;
+    document.getElementById('favorite-note').value = '';
+    document.getElementById('add-favorite-modal').classList.add('active');
+}
+
+// Luk modal
+function closeModal() {
+    document.getElementById('add-favorite-modal').classList.remove('active');
+    currentHeroId = null;
+}
+
+// Gem favorit
+async function saveFavorite() {
+    const note = document.getElementById('favorite-note').value;
+    
+    if (!note || note.length < 2) {
+        alert('Skriv venligst en note på mindst 2 tegn');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/superheroes/favorites', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: currentHeroId, note: note })
+        });
+        
+        if (response.ok) {
+            closeModal();
+            alert('Favorit tilføjet! ⭐ Gå til "Mine Favoritter" tab for at se den!');
+        } else {
+            const error = await response.json();
+            alert('Fejl: ' + (error.error || 'Kunne ikke tilføje favorit'));
+        }
+    } catch (error) {
+        alert('Netværksfejl: ' + error.message);
+    }
+}
+
+// Slet favorit
+async function deleteFavorite(id) {
+    if (!confirm('Er du sikker på at du vil slette denne favorit?')) return;
+    
+    try {
+        const response = await fetch(`/superheroes/favorites/${id}`, { method: 'DELETE' });
+        
+        if (response.ok) {
+            loadFavorites();
+            alert('Favorit slettet! 🗑️');
+        } else {
+            alert('Fejl ved sletning af favorit');
+        }
+    } catch (error) {
+        alert('Netværksfejl: ' + error.message);
+    }
+}
+
+// Event listeners
+document.getElementById('add-favorite-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeModal();
+});
+
+window.addEventListener('DOMContentLoaded', () => {
+    loadHeroes();
+    loadFavorites();
+});
+    </script>
+</body>
+</html>

@@ -13,7 +13,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 //Root route
 app.get('/', (req, res) => {
-    res.send('Welcome to the Superhero REST API!');
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 //Routes
